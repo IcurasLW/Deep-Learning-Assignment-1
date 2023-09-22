@@ -102,9 +102,6 @@ def test(model,  dataloader, loss_fn, model_name):
 
 
 
-
-
-
 def cross_validate(data_path, k=5, epochs=20, batch_size=32):
     kf = KFold(n_splits=k, shuffle=True, random_state=0)
     
@@ -119,13 +116,14 @@ def cross_validate(data_path, k=5, epochs=20, batch_size=32):
         model_SLP = SinglePerceptron(train_X.shape[1]).to(DEVICE)
         
         # Optimizer Initialization
-        optimizer_MLP_V_2 = torch.optim.SGD(params=model_MLP_V2.parameters(), lr=8e-4, weight_decay=1e-3, momentum=0.9)
-        optimizer_MLP_V_1 = torch.optim.SGD(params=model_MLP_V1.parameters(), lr=8e-4, weight_decay=1e-3, momentum=0.9)
+        optimizer_MLP_V_2 = torch.optim.SGD(params=model_MLP_V2.parameters(), lr=1e-3, weight_decay=1e-4)
+        optimizer_MLP_V_1 = torch.optim.SGD(params=model_MLP_V1.parameters(), lr=1e-3, weight_decay=1e-4)
         optimizer_SLP = torch.optim.Adam(params=model_SLP.parameters(), lr=0.1, weight_decay=1e-3)
         
         # Loss function Initialization
         loss_fn = nn.BCELoss()
-        
+
+
         # Data split
         train_X_k, val_X = train_X[train_index], train_X[val_index]
         train_Y_k, val_Y = train_Y[train_index], train_Y[val_index]
@@ -147,7 +145,7 @@ def cross_validate(data_path, k=5, epochs=20, batch_size=32):
         train(model_SLP, optimizer_SLP, train_dataloader, loss_fn, f, epochs=epochs, model_name='SLP')
         validate(model_SLP, val_dataloader, loss_fn, f, model_name='SLP')
         RF_model, SVM_model = stats_CV(train_X_k, val_X, train_Y_k, val_Y, k=f)
-        
+    
     
     test_dataset = Ourdataset(test_X, test_Y)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
@@ -160,12 +158,13 @@ def cross_validate(data_path, k=5, epochs=20, batch_size=32):
 
 
     # save the test data and model for drawing graphs in jupyter notebook
-    np.save('test_X.npy', test_X)
-    np.save('test_Y.npy', test_Y)
-    torch.save(model_MLP_V2.state_dict(), 'model_MLP.pth')
-    torch.save(model_SLP.state_dict(), 'model_SLP.pth')
-    joblib.dump(RF_model, 'RF_model.pkl')
-    joblib.dump(SVM_model, 'SVM_model.pkl')
+    np.save('./models/test_X.npy', test_X)
+    np.save('./models/test_Y.npy', test_Y)
+    torch.save(model_MLP_V1.state_dict(), './models/model_MLP_V1.pth')
+    torch.save(model_MLP_V2.state_dict(), './models/model_MLP_V2.pth')
+    torch.save(model_SLP.state_dict(), './models/model_SLP.pth')
+    joblib.dump(RF_model, './models/RF_model.pkl')
+    joblib.dump(SVM_model, './models/SVM_model.pkl')
     
 
 

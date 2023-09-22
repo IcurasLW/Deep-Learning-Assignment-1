@@ -71,7 +71,7 @@ def data_prepare(data_path):
     fn_1 = lambda x: x.str[2:].astype('float32')
     df = df.iloc[:, 1:].apply(fn_1, axis=1)
     X = df.to_numpy()
-    train_X, test_X, train_Y, test_Y = train_test_split(X, Y, test_size=0.2,stratify=Y)
+    train_X, test_X, train_Y, test_Y = train_test_split(X, Y, test_size=0.2, stratify=Y)
     scaler = StandardScaler()
     train_X = scaler.fit_transform(train_X)
     test_X = scaler.fit_transform(test_X)
