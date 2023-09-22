@@ -1,10 +1,10 @@
 from torch.utils.data import Dataset, DataLoader
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import precision_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, Normalizer
+import matplotlib.pyplot as plt
+from torch.nn import functional as F
+import seaborn as sns
 import pandas as pd
 import numpy as np
 import torch
@@ -16,6 +16,8 @@ import os
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.set_default_dtype(torch.float32)
 torch.cuda.manual_seed_all(0)
+
+
 
 
 
@@ -37,17 +39,19 @@ class Ourdataset(Dataset):
 
 
 def evaluate(y_pred, y_true):
+    y_pred_prob = y_pred.copy()
     y_pred = np.where(y_pred>=0.5, 1, 0)
     acc = accuracy_score(y_pred=y_pred, y_true=y_true)
     f1 = f1_score(y_pred=y_pred, y_true=y_true, average='binary', zero_division=1)
     precision = precision_score(y_pred=y_pred, y_true=y_true, average='binary', zero_division=1)
     recall = recall_score(y_pred=y_pred, y_true=y_true, average='binary', zero_division=1)
-    
+    auc = roc_auc_score(y_true, y_pred_prob)
     output = {
             'Acc':acc,
             'F1': f1,
             'Precision': precision,
             'Recall': recall,
+            'AUC': auc
             }
 
     return output
@@ -67,7 +71,13 @@ def data_prepare(data_path):
     fn_1 = lambda x: x.str[2:].astype('float32')
     df = df.iloc[:, 1:].apply(fn_1, axis=1)
     X = df.to_numpy()
-    return X, Y
+    train_X, test_X, train_Y, test_Y = train_test_split(X, Y, test_size=0.2,stratify=Y)
+    scaler = StandardScaler()
+    train_X = scaler.fit_transform(train_X)
+    test_X = scaler.fit_transform(test_X)
+    
+    
+    return train_X, test_X, train_Y, test_Y
 
 
 

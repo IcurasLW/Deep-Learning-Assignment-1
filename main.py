@@ -9,7 +9,7 @@ from classifier import *
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-
+import joblib
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.set_default_dtype(torch.float32)
@@ -41,13 +41,7 @@ def train(model, optimizer, dataloader, loss_fn, fold_num, model_name, epochs=10
         metrics = evaluate(y_pred, y_true)
         losses /= batch_idx + 1
         metrics['Loss'] = losses
-        progress_bar.set_description(f"---Training---: \
-                                     Epoch {e+1}/{epochs}, \
-                                     Loss: {losses:.4f}, \
-                                     Acc: {metrics['Acc']}, \
-                                     Precision: {metrics['Precision']:.4f}, \
-                                     Recall: {metrics['Recall']:.4f}, \
-                                     F1: {metrics['F1']:.4f}")
+        
         
         save_results(save_path, fold_num, metrics, mode='train', model_name=model_name)
 
@@ -75,12 +69,6 @@ def validate(model, dataloader, loss_fn, fold_num, model_name):
     metrics = evaluate(y_pred, y_true)
     losses /= batch_idx + 1
     metrics['Loss'] = losses
-    progress_bar.set_description(f"---Validation---: \
-                                 Loss: {loss.item():.4f}, \
-                                 Acc: {metrics['Acc']}, \
-                                 Precision: {metrics['Precision']:.4f}, \
-                                 Recall: {metrics['Recall']:.4f}, \
-                                 F1: {metrics['F1']:.4f}")
     
     save_results(save_path, fold_num, metrics, model_name=model_name, mode='val')
 
@@ -108,12 +96,7 @@ def test(model,  dataloader, loss_fn, model_name):
     metrics = evaluate(y_pred, y_true)
     losses /= batch_idx + 1
     metrics['Loss'] = losses
-    progress_bar.set_description(f"---Validation---: \
-                                 Loss: {loss.item():.4f}, \
-                                 Acc: {metrics['Acc']}, \
-                                 Precision: {metrics['Precision']:.4f}, \
-                                 Recall: {metrics['Recall']:.4f}, \
-                                 F1: {metrics['F1']:.4f}")
+    
     
     save_results(save_path, 0, metrics, mode='test', model_name=model_name)
 
@@ -121,18 +104,23 @@ def test(model,  dataloader, loss_fn, model_name):
 
 
 
+
 def cross_validate(data_path, k=5, epochs=20, batch_size=32):
     kf = KFold(n_splits=k, shuffle=True, random_state=0)
-    X, Y = data_prepare(data_path)
-    train_X, test_X, train_Y, test_Y = train_test_split(X, Y, test_size=0.2,stratify=Y)
-
+    
+    # Preprocess data
+    train_X, test_X, train_Y, test_Y = data_prepare(data_path)
+    
+    
     for f, (train_index, val_index) in enumerate(kf.split(train_X)):
         # Model Initialization
-        model_MLP = MLP_V1(train_X.shape[1]).to(DEVICE)
+        model_MLP_V1 = MLP_V1(train_X.shape[1]).to(DEVICE)
+        model_MLP_V2 = MLP_V2(train_X.shape[1]).to(DEVICE)
         model_SLP = SinglePerceptron(train_X.shape[1]).to(DEVICE)
         
         # Optimizer Initialization
-        optimizer_MLP = torch.optim.Adam(params=model_MLP.parameters(), lr=0.001, weight_decay=1e-3)
+        optimizer_MLP_V_2 = torch.optim.SGD(params=model_MLP_V2.parameters(), lr=8e-4, weight_decay=1e-3, momentum=0.9)
+        optimizer_MLP_V_1 = torch.optim.SGD(params=model_MLP_V1.parameters(), lr=8e-4, weight_decay=1e-3, momentum=0.9)
         optimizer_SLP = torch.optim.Adam(params=model_SLP.parameters(), lr=0.1, weight_decay=1e-3)
         
         # Loss function Initialization
@@ -147,25 +135,44 @@ def cross_validate(data_path, k=5, epochs=20, batch_size=32):
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
         
-        train(model_MLP, optimizer_MLP, train_dataloader, loss_fn, f, epochs=epochs, model_name='MLP')
-        validate(model_MLP, val_dataloader, loss_fn, f, model_name='MLP')
+        
+        
+        ########### Train & Validate Phrase #############
+        train(model_MLP_V1, optimizer_MLP_V_1, train_dataloader, loss_fn, f, epochs=epochs, model_name='MLP_V1')
+        validate(model_MLP_V1, val_dataloader, loss_fn, f, model_name='MLP_V1')
+        
+        train(model_MLP_V2, optimizer_MLP_V_2, train_dataloader, loss_fn, f, epochs=epochs, model_name='MLP_V2')
+        validate(model_MLP_V2, val_dataloader, loss_fn, f, model_name='MLP_V2')
+        
         train(model_SLP, optimizer_SLP, train_dataloader, loss_fn, f, epochs=epochs, model_name='SLP')
         validate(model_SLP, val_dataloader, loss_fn, f, model_name='SLP')
         RF_model, SVM_model = stats_CV(train_X_k, val_X, train_Y_k, val_Y, k=f)
-    
+        
     
     test_dataset = Ourdataset(test_X, test_Y)
     test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     stats_test(RF_model, test_X, test_Y, model_name='RF')
     stats_test(SVM_model, test_X, test_Y, model_name='SVM')
-    test(model_MLP, test_dataloader, loss_fn, model_name='MLP')
+    test(model_MLP_V1, test_dataloader, loss_fn, model_name='MLP_V1')
+    test(model_MLP_V2, test_dataloader, loss_fn, model_name='MLP_V2')
     test(model_SLP, test_dataloader, loss_fn, model_name='SLP')
+    
+
+
+    # save the test data and model for drawing graphs in jupyter notebook
+    np.save('test_X.npy', test_X)
+    np.save('test_Y.npy', test_Y)
+    torch.save(model_MLP_V2.state_dict(), 'model_MLP.pth')
+    torch.save(model_SLP.state_dict(), 'model_SLP.pth')
+    joblib.dump(RF_model, 'RF_model.pkl')
+    joblib.dump(SVM_model, 'SVM_model.pkl')
+    
 
 
 
 ###################################### Statistical Model ######################################
 def stats_test(model, test_X, test_Y, model_name):
-    y_pred = model(test_X)
+    y_pred = model.predict(test_X)
     metrics = evaluate(y_pred, test_Y)
     save_path = 'output/'
     save_results(save_path, model_name, metrics, mode='test', model_name=model_name)
