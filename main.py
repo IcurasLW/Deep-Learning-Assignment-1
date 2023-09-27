@@ -11,18 +11,19 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 import joblib
 
+
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 torch.set_default_dtype(torch.float32)
 torch.cuda.manual_seed_all(0)
 
 
 
-def train(model, optimizer, dataloader, loss_fn, fold_num, model_name, epochs=10):
+def train(model, optimizer, train_dataloader, val_dataloader, loss_fn, fold_num, model_name, epochs=10):
     model.train()
     save_path = 'output/'
     
     for e in range(epochs):
-        progress_bar = tqdm(enumerate(dataloader), total=len(dataloader))
+        progress_bar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         y_pred = []
         y_true = []
         losses = 0
@@ -41,10 +42,9 @@ def train(model, optimizer, dataloader, loss_fn, fold_num, model_name, epochs=10
         metrics = evaluate(y_pred, y_true)
         losses /= batch_idx + 1
         metrics['Loss'] = losses
-        
-        
         save_results(save_path, fold_num, metrics, mode='train', model_name=model_name)
-
+        
+        validate(model, val_dataloader, loss_fn, fold_num, model_name=model_name)
 
 
 
@@ -102,12 +102,15 @@ def test(model,  dataloader, loss_fn, model_name):
 
 
 
-def cross_validate(data_path, k=5, epochs=20, batch_size=32):
+def cross_validate(k=5, epochs=50, batch_size=32):
     kf = KFold(n_splits=k, shuffle=True, random_state=0)
     
     # Preprocess data
-    train_X, test_X, train_Y, test_Y = data_prepare(data_path)
-    
+    # train_X, test_X, train_Y, test_Y = data_prepare(data_path)
+    train_X = np.load('Train_X.npy')
+    train_Y = np.load('Train_Y.npy')
+    test_X = np.load('Test_X.npy')
+    test_Y = np.load('Test_Y.npy')
     
     for f, (train_index, val_index) in enumerate(kf.split(train_X)):
         # Model Initialization
@@ -115,11 +118,13 @@ def cross_validate(data_path, k=5, epochs=20, batch_size=32):
         model_MLP_V2 = MLP_V2(train_X.shape[1]).to(DEVICE)
         model_SLP = SinglePerceptron(train_X.shape[1]).to(DEVICE)
         
-        # Optimizer Initialization
-        optimizer_MLP_V_2 = torch.optim.SGD(params=model_MLP_V2.parameters(), lr=1e-3, weight_decay=1e-4)
-        optimizer_MLP_V_1 = torch.optim.SGD(params=model_MLP_V1.parameters(), lr=1e-3, weight_decay=1e-4)
-        optimizer_SLP = torch.optim.Adam(params=model_SLP.parameters(), lr=0.1, weight_decay=1e-3)
         
+        # Optimizer Initialization
+        optimizer_MLP_V_2 = torch.optim.SGD(params=model_MLP_V2.parameters(), lr=1e-3, weight_decay=1e-4, momentum=0.9)
+        optimizer_MLP_V_1 = torch.optim.SGD(params=model_MLP_V1.parameters(), lr=1e-3, weight_decay=1e-4, momentum=0.9)
+        optimizer_SLP = torch.optim.SGD(params=model_SLP.parameters(), lr=1e-3, weight_decay=1e-3, momentum=0.9)
+
+
         # Loss function Initialization
         loss_fn = nn.BCELoss()
 
@@ -127,7 +132,6 @@ def cross_validate(data_path, k=5, epochs=20, batch_size=32):
         # Data split
         train_X_k, val_X = train_X[train_index], train_X[val_index]
         train_Y_k, val_Y = train_Y[train_index], train_Y[val_index]
-        
         train_dataset = Ourdataset(train_X_k, train_Y_k)
         val_dataset = Ourdataset(val_X, val_Y)
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -136,14 +140,9 @@ def cross_validate(data_path, k=5, epochs=20, batch_size=32):
         
         
         ########### Train & Validate Phrase #############
-        train(model_MLP_V1, optimizer_MLP_V_1, train_dataloader, loss_fn, f, epochs=epochs, model_name='MLP_V1')
-        validate(model_MLP_V1, val_dataloader, loss_fn, f, model_name='MLP_V1')
-        
-        train(model_MLP_V2, optimizer_MLP_V_2, train_dataloader, loss_fn, f, epochs=epochs, model_name='MLP_V2')
-        validate(model_MLP_V2, val_dataloader, loss_fn, f, model_name='MLP_V2')
-        
-        train(model_SLP, optimizer_SLP, train_dataloader, loss_fn, f, epochs=epochs, model_name='SLP')
-        validate(model_SLP, val_dataloader, loss_fn, f, model_name='SLP')
+        train(model_MLP_V1, optimizer_MLP_V_1, train_dataloader, val_dataloader, loss_fn, f, epochs=epochs, model_name='MLP_V1')
+        train(model_MLP_V2, optimizer_MLP_V_2, train_dataloader, val_dataloader, loss_fn, f, epochs=epochs, model_name='MLP_V2')
+        train(model_SLP, optimizer_SLP, train_dataloader, val_dataloader, loss_fn, f, epochs=epochs, model_name='SLP')
         RF_model, SVM_model = stats_CV(train_X_k, val_X, train_Y_k, val_Y, k=f)
     
     
@@ -196,5 +195,4 @@ def stats_CV(train_X, test_X, train_Y, test_Y, k):
 
 
 if __name__ == "__main__":
-    data_path = 'diabetes_scaled.txt'
-    cross_validate(data_path=data_path)
+    cross_validate()

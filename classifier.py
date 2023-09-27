@@ -13,7 +13,7 @@ class MLP_V1(nn.Module):
         super().__init__()
         
         self.extract = nn.Sequential(nn.Linear(in_features=input_size, out_features=32),
-                                     nn.BatchNorm1d(32),
+                                    nn.BatchNorm1d(32),
                                     nn.ReLU(),
                                     
                                     
@@ -41,7 +41,7 @@ class MLP_V2(nn.Module):
         super().__init__()
         
         self.extract = nn.Sequential(nn.Linear(in_features=input_size, out_features=128),
-                                     nn.BatchNorm1d(128),
+                                    nn.BatchNorm1d(128),
                                     nn.ReLU(),
                                     
                                     
@@ -49,13 +49,13 @@ class MLP_V2(nn.Module):
                                     nn.BatchNorm1d(128),
                                     nn.ReLU(),
 
-                                    
+
                                     nn.Linear(in_features=128, out_features=128),
                                     nn.BatchNorm1d(128),
                                     nn.ReLU())
         
         self.fc = nn.Sequential(nn.Linear(in_features=128, out_features=1),
-                                nn.Dropout(0.1),
+                                nn.Dropout(0.2),
                                 nn.Sigmoid())
 
     def forward(self, X):
